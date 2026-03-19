@@ -208,3 +208,9 @@ __marimo__/
 venv/ 
 .env 
 .env.local 
+
+# Claude Code local memory (not for repo)
+.claude/
+
+# Misc artefacts
+0.95

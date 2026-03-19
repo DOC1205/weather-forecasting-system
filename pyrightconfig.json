@@ -1,0 +1,7 @@
+{
+  "include": ["src", "app.py", "data_fetcher.py"],
+  "extraPaths": ["src"],
+  "pythonVersion": "3.11",
+  "reportMissingImports": "warning",
+  "reportMissingModuleSource": "none"
+}

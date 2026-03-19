@@ -18,7 +18,7 @@ class WeatherPreprocessor:
         """
         self.sequence_length = sequence_length
         self.scaler = MinMaxScaler(feature_range=(0, 1))
-        self.feature_columns = None
+        self.feature_columns: list[str] = []   # populated by select_features()
         self.target_column = 'temperature'
         
     def load_data(self, filepath: str) -> pd.DataFrame:
@@ -117,10 +117,10 @@ class WeatherPreprocessor:
         val_df = df[train_end:val_end].copy()
         test_df = df[val_end:].copy()
         
-        print(f"📊 Разделение данных:")
-        print(f"   Train: {len(train_df)} записей ({len(train_df)/n*100:.1f}%)")
-        print(f"   Val:   {len(val_df)} записей ({len(val_df)/n*100:.1f}%)")
-        print(f"   Test:  {len(test_df)} записей ({len(test_df)/n*100:.1f}%)")
+        print("[*] Splitting data:")
+        print(f"   Train: {len(train_df)} samples ({len(train_df)/n*100:.1f}%)")
+        print(f"   Val:   {len(val_df)} samples ({len(val_df)/n*100:.1f}%)")
+        print(f"   Test:  {len(test_df)} samples ({len(test_df)/n*100:.1f}%)")
         
         return train_df, val_df, test_df
     
@@ -131,29 +131,29 @@ class WeatherPreprocessor:
         Returns:
             dict с обработанными данными
         """
-        print("🔄 Начало preprocessing...")
-        
-        # 1. Загрузка
-        print("   1/6 Загрузка данных...")
+        print("[*] Starting preprocessing...")
+
+        # 1. Load
+        print("   1/6 Loading data...")
         df = self.load_data(filepath)
-        print(f"       Загружено: {len(df)} записей")
-        
+        print(f"       Loaded: {len(df)} records")
+
         # 2. Feature Engineering
         print("   2/6 Feature Engineering...")
         df = self.select_features(df)
-        print(f"       Признаков: {len(self.feature_columns)}")
-        
-        # 3. Обработка пропусков
-        print("   3/6 Обработка пропущенных значений...")
+        print(f"       Features: {len(self.feature_columns)}")
+
+        # 3. Missing values
+        print("   3/6 Handling missing values...")
         df = self.handle_missing_values(df)
-        print(f"       Осталось: {len(df)} записей")
-        
-        # 4. Разделение на train/val/test
-        print("   4/6 Разделение данных...")
+        print(f"       Remaining: {len(df)} records")
+
+        # 4. Split
+        print("   4/6 Splitting data...")
         train_df, val_df, test_df = self.split_data(df)
-        
-        # 5. Нормализация (fit только на train!)
-        print("   5/6 Нормализация...")
+
+        # 5. Normalise (fit on train only!)
+        print("   5/6 Normalizing...")
         train_df = self.normalize_data(train_df, fit=True)
         val_df = self.normalize_data(val_df, fit=False)
         test_df = self.normalize_data(test_df, fit=False)
@@ -178,8 +178,8 @@ class WeatherPreprocessor:
         print(f"       X_val shape:   {X_val.shape}")
         print(f"       X_test shape:  {X_test.shape}")
         
-        # 7. Сохранение
-        print("   💾 Сохранение обработанных данных...")
+        # 7. Save
+        print("   Saving processed data...")
         os.makedirs(save_dir, exist_ok=True)
         
         np.save(f'{save_dir}/X_train.npy', X_train)
@@ -206,8 +206,8 @@ class WeatherPreprocessor:
         with open(f'{save_dir}/metadata.pkl', 'wb') as f:
             pickle.dump(metadata, f)
         
-        print(f"\n✅ Preprocessing завершён!")
-        print(f"   Файлы сохранены в: {save_dir}/")
+        print(f"\n[+] Preprocessing complete!")
+        print(f"   Files saved to: {save_dir}/")
         
         return {
             'X_train': X_train, 'y_train': y_train,
@@ -225,8 +225,8 @@ if __name__ == "__main__":
         save_dir='data/processed'
     )
     
-    print("\n📊 Итоговая статистика:")
-    print(f"   Форма входных данных: {data['X_train'].shape}")
-    print(f"   Форма целевой переменной: {data['y_train'].shape}")
-    print(f"   Количество признаков: {data['metadata']['n_features']}")
-    print(f"   Длина последовательности: {data['metadata']['sequence_length']} часов")
+    print("\n[*] Summary:")
+    print(f"   Input shape:     {data['X_train'].shape}")
+    print(f"   Target shape:    {data['y_train'].shape}")
+    print(f"   Features:        {data['metadata']['n_features']}")
+    print(f"   Sequence length: {data['metadata']['sequence_length']} hours")

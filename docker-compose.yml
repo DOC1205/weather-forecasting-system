@@ -1,0 +1,27 @@
+version: '3.8'
+
+services:
+  weather-app:
+    build: .
+    container_name: weather-forecasting-system
+    ports:
+      - "8501:8501"
+    volumes:
+      # Монтировать данные и модели (чтобы не пересобирать образ)
+      - ./data:/app/data
+      - ./models:/app/models
+      - ./docs:/app/docs
+    environment:
+      - OPENWEATHERMAP_API_KEY=${OPENWEATHERMAP_API_KEY}
+      - CITY=Astana
+      - LAT=51.1694
+      - LON=71.4491
+    env_file:
+      - .env
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8501/_stcore/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
