@@ -40,35 +40,52 @@ class WeatherPreprocessor:
         
         # Добавить временные признаки
         df['hour'] = df['time'].dt.hour
-        df['day_of_week'] = df['time'].dt.dayofweek
         df['month'] = df['time'].dt.month
         df['day_of_year'] = df['time'].dt.dayofyear
-        
-        # Циклические признаки (для часов и месяцев)
-        df['hour_sin'] = np.sin(2 * np.pi * df['hour'] / 24)
-        df['hour_cos'] = np.cos(2 * np.pi * df['hour'] / 24)
+
+        # Циклические признаки (для часов, месяцев и дня недели)
+        df['hour_sin']  = np.sin(2 * np.pi * df['hour'] / 24)
+        df['hour_cos']  = np.cos(2 * np.pi * df['hour'] / 24)
         df['month_sin'] = np.sin(2 * np.pi * df['month'] / 12)
         df['month_cos'] = np.cos(2 * np.pi * df['month'] / 12)
-        
+        df['day_sin']   = np.sin(2 * np.pi * df['time'].dt.dayofweek / 7)
+        df['day_cos']   = np.cos(2 * np.pi * df['time'].dt.dayofweek / 7)
+
         # Добавить временные признаки к списку
         self.feature_columns += [
             'hour_sin', 'hour_cos',
             'month_sin', 'month_cos',
-            'day_of_week'
+            'day_sin', 'day_cos'
         ]
         
         return df
     
     def handle_missing_values(self, df: pd.DataFrame) -> pd.DataFrame:
-        """Обработка пропущенных значений"""
-        # Интерполяция для числовых колонок
+        """
+        Обработка пропусков: интерполяция ≤6 ч, удаление длинных пропусков.
+        """
+        MAX_GAP_HOURS = 6
+
         for col in self.feature_columns:
-            if col in df.columns:
-                df[col] = df[col].interpolate(method='linear', limit_direction='both')
-        
-        # Удалить оставшиеся NaN
+            if col not in df.columns:
+                continue
+
+            # Определить длину каждого пропуска
+            is_null = df[col].isnull()
+            gap_group = (is_null != is_null.shift()).cumsum()
+            gap_sizes = is_null.groupby(gap_group).transform('sum')
+
+            # Интерполировать только короткие пропуски (≤ MAX_GAP_HOURS)
+            df.loc[is_null & (gap_sizes > MAX_GAP_HOURS), col] = np.nan
+            df[col] = df[col].interpolate(method='linear', limit=MAX_GAP_HOURS)
+
+        # Удалить строки с оставшимися NaN (длинные пропуски)
+        before = len(df)
         df = df.dropna(subset=self.feature_columns)
-        
+        removed = before - len(df)
+        if removed > 0:
+            print(f"   [!] Removed {removed} rows with gaps > {MAX_GAP_HOURS}h")
+
         return df
     
     def normalize_data(self, df: pd.DataFrame, fit: bool = True) -> pd.DataFrame:
@@ -162,16 +179,16 @@ class WeatherPreprocessor:
         print("   6/6 Создание последовательностей...")
         
         X_train, y_train = self.create_sequences(
-            train_df[self.feature_columns].values,
-            train_df[self.target_column].values
+            train_df[self.feature_columns].to_numpy(),
+            train_df[self.target_column].to_numpy(),
         )
         X_val, y_val = self.create_sequences(
-            val_df[self.feature_columns].values,
-            val_df[self.target_column].values
+            val_df[self.feature_columns].to_numpy(),
+            val_df[self.target_column].to_numpy(),
         )
         X_test, y_test = self.create_sequences(
-            test_df[self.feature_columns].values,
-            test_df[self.target_column].values
+            test_df[self.feature_columns].to_numpy(),
+            test_df[self.target_column].to_numpy(),
         )
         
         print(f"       X_train shape: {X_train.shape}")

@@ -155,6 +155,8 @@ def load_model():
     saved_type  = checkpoint.get("model_type", None)   # set by updated train.py
     saved_cfg   = checkpoint.get("model_config", {})
 
+    bias_corr = float(checkpoint.get("bias_correction", 0.0))
+
     # --- Use explicit model_type key (new checkpoints from train.py) ------
     if saved_type == "hybrid":
         c = saved_cfg or {}
@@ -171,6 +173,7 @@ def load_model():
         )
         model.load_state_dict(state_dict)
         model.to(device).eval()
+        object.__setattr__(model, "_bias_correction", bias_corr)
         return model, "Hybrid (LSTM+TCN+Transformer)"
 
     if saved_type == "lstm":
@@ -183,6 +186,7 @@ def load_model():
         )
         model.load_state_dict(state_dict)
         model.to(device).eval()
+        object.__setattr__(model, "_bias_correction", bias_corr)
         return model, "LSTM (baseline)"
 
     # --- Fallback for old checkpoints: try Hybrid, then LSTM -------------
@@ -190,6 +194,7 @@ def load_model():
         model = HybridWeatherModel(input_size=n_features)
         model.load_state_dict(state_dict)
         model.to(device).eval()
+        object.__setattr__(model, "_bias_correction", bias_corr)
         return model, "Hybrid (LSTM+TCN+Transformer)"
     except Exception:
         pass
@@ -197,6 +202,7 @@ def load_model():
     model = WeatherLSTM(input_size=n_features, hidden_size=128, num_layers=2, dropout=0.2)
     model.load_state_dict(state_dict)
     model.to(device).eval()
+    object.__setattr__(model, "_bias_correction", bias_corr)
     return model, "LSTM (baseline)"
 
 
@@ -259,6 +265,7 @@ def predict(input_tensor_np: np.ndarray) -> Optional[float]:
     tensor = torch.FloatTensor(input_tensor_np).to(device)
     with torch.no_grad():
         norm_pred = model(tensor).cpu().numpy()[0, 0]
+    norm_pred += getattr(model, "_bias_correction", 0.0)
     return denormalise_temperature(norm_pred, scaler)
 
 
@@ -304,11 +311,13 @@ def predict_autoregressive(
     temp_idx = FEATURE_COLUMNS.index("temperature")
     predictions = []
 
+    bias_corr = getattr(model, "_bias_correction", 0.0)
     for step in range(1, steps + 1):
         tensor = torch.FloatTensor(seq).to(device)
         with torch.no_grad():
             norm_pred = model(tensor).cpu().numpy()[0, 0]
 
+        norm_pred += bias_corr
         real_temp = denormalise_temperature(norm_pred, scaler)
         predictions.append(real_temp)
 
@@ -353,7 +362,7 @@ if page == "🏠 Главная":
 
         ### ✨ Ключевые возможности
         - ✅ 24-часовое окно наблюдений → прогноз на 12 часов вперёд
-        - ✅ 10 признаков: температура, влажность, давление, ветер, точка росы + циклические временны́е кодировки
+        - ✅ 11 признаков: температура, влажность, давление, ветер, точка росы + циклические временны́е кодировки
         - ✅ Живые данные через OpenWeatherMap API (fallback: исторический CSV)
         - ✅ Интерактивные Plotly-графики прямо в браузере
         """)
@@ -364,16 +373,16 @@ if page == "🏠 Главная":
         model_obj, model_type = load_model()
 
         # Try to pull real metrics from evaluation report
-        mae_str, rmse_str, r2_str = "~1.0°C", "~1.4°C", "0.97"
+        mae_str, rmse_str, r2_str = "~1.8°C", "~2.3°C", "0.9351"
         try:
             with open("docs/evaluation_report.txt", "r", encoding="utf-8") as fh:
                 _rpt = fh.read()
         except Exception:
             pass
 
-        st.metric("MAE", mae_str,  delta="лучше Linear Reg на 63%")
-        st.metric("RMSE", rmse_str, delta="лучше Random Forest на 59%")
-        st.metric("R² Score", r2_str, delta="+0.02 vs. baseline LSTM")
+        st.metric("MAE",      mae_str,  delta="лучше Linear Reg на 53%")
+        st.metric("RMSE",     rmse_str, delta="лучше Random Forest на 34%")
+        st.metric("R² Score", r2_str,   delta="+0.015 vs. baseline LSTM")
 
         st.markdown("---")
         st.markdown("### 🏗️ Технологии")
@@ -484,7 +493,7 @@ elif page == "🧠 Модель":
         | Параметр | Значение |
         |----------|----------|
         | **Архитектура** | LSTM + TCN + Transformer |
-        | **Input size** | 10 признаков |
+        | **Input size** | 11 признаков |
         | **LSTM hidden** | 128 |
         | **LSTM layers** | 2 |
         | **TCN channels** | 64 |
@@ -504,7 +513,7 @@ elif page == "🧠 Модель":
         5. `dew_point` — точка росы (°C)
         6. `hour_sin` / 7. `hour_cos` — циклический час
         8. `month_sin` / 9. `month_cos` — циклический месяц
-        10. `day_of_week` — день недели (0–6)
+        10. `day_sin` / 11. `day_cos` — циклический день недели
         """)
 
         if model_obj is not None:
@@ -654,11 +663,11 @@ elif page == "🔮 Прогноз":
                     ]
 
                     # ── Step C: metric cards ──────────────────────────────
+                    current_t = float(hist_temps.iloc[-1]) if hist_temps is not None else 0.0
                     if forecast_temps:
                         st.subheader("📊 Прогноз температуры")
                         m1, m2, m3, m4 = st.columns(4)
 
-                        current_t  = float(hist_temps.iloc[-1]) if hist_temps is not None else 0.0
                         next_1h    = forecast_temps[0]
                         next_12h   = forecast_temps[11] if len(forecast_temps) > 11 else forecast_temps[-1]
                         next_24h   = forecast_temps[-1]
@@ -672,6 +681,32 @@ elif page == "🔮 Прогноз":
                                   delta=f"{next_12h - current_t:+.1f}°C")
                         m4.metric(f"Завтра ({lbl_24h})", f"{next_24h:.1f}°C",
                                   delta=f"{next_24h - current_t:+.1f}°C")
+
+                    # ── Gated Fusion weights visualization ────────────────
+                    try:
+                        with torch.no_grad():
+                            _, gate_w = model_obj(
+                                torch.FloatTensor(tensor_norm).to(next(model_obj.parameters()).device),
+                                return_gates=True,
+                            )
+                        g = gate_w[0]  # [3]
+                        st.markdown("**⚖️ Вклад ветвей (Gated Fusion) для этого прогноза:**")
+                        gc1, gc2, gc3 = st.columns(3)
+                        gc1.metric("LSTM",        f"{g[0]*100:.1f}%",
+                                   help="Вес ветви LSTM (последовательные зависимости)")
+                        gc2.metric("TCN",         f"{g[1]*100:.1f}%",
+                                   help="Вес ветви TCN (локальные паттерны)")
+                        gc3.metric("Transformer", f"{g[2]*100:.1f}%",
+                                   help="Вес ветви Transformer (глобальные корреляции)")
+                    except Exception:
+                        pass
+
+                    st.info(
+                        "⚠️ Прогноз строится авторегрессивно: каждое предсказание "
+                        "используется как вход для следующего шага. Точность снижается "
+                        "с увеличением горизонта. MAE = 1.52°C актуален для горизонта 1–3 ч; "
+                        "для 12–24 ч погрешность выше."
+                    )
 
                     # ── Step C: interactive Plotly chart ──────────────────
                     fig = go.Figure()
@@ -769,7 +804,7 @@ elif page == "🔮 Прогноз":
                     with st.spinner("Загрузка прогноза Open-Meteo…"):
                         om_times, om_temps = fetch_openmeteo_forecast_temps(hours=24)
 
-                    if om_temps is not None and len(om_temps) > 0:
+                    if om_times is not None and om_temps is not None and len(om_temps) > 0:
                         # Align model and Open-Meteo forecasts by timestamp
                         model_map = {t: v for t, v in zip(forecast_times, forecast_temps)}
                         rows = []
@@ -835,10 +870,26 @@ elif page == "🔮 Прогноз":
                     # Step C: accuracy metric cards from evaluation report
                     st.subheader("📈 Метрики точности модели на тестовой выборке")
                     ma1, ma2, ma3, ma4 = st.columns(4)
-                    ma1.metric("MAE",   "1.01°C", help="Mean Absolute Error")
-                    ma2.metric("RMSE",  "1.44°C", help="Root Mean Squared Error")
-                    ma3.metric("R²",    "0.9736",  help="Коэффициент детерминации")
+                    ma1.metric("MAE",   "1.80°C", help="Mean Absolute Error")
+                    ma2.metric("RMSE",  "2.25°C", help="Root Mean Squared Error")
+                    ma3.metric("R²",    "0.9351",  help="Коэффициент детерминации")
                     ma4.metric("Модель", model_type)
+
+                    # ── Gate weights for this forecast ───────────────────
+                    if isinstance(model_obj, HybridWeatherModel) and tensor_norm is not None:
+                        try:
+                            _device = next(model_obj.parameters()).device
+                            _inp = torch.FloatTensor(tensor_norm).to(_device)
+                            with torch.no_grad():
+                                _, _gates = model_obj(_inp, return_gates=True)
+                            g = _gates[0]   # [3]
+                            st.markdown("**Веса Gated Fusion для этого прогноза:**")
+                            col_l, col_t, col_tr = st.columns(3)
+                            col_l.metric("LSTM",         f"{g[0]*100:.1f}%")
+                            col_t.metric("TCN",          f"{g[1]*100:.1f}%")
+                            col_tr.metric("Transformer", f"{g[2]*100:.1f}%")
+                        except Exception:
+                            pass
 
         elif not run_live:
             st.info("👆 Нажмите **Запустить прогноз** для получения результата.")
@@ -955,30 +1006,22 @@ elif page == "📈 Результаты":
         y_true, y_pred = _load_test_predictions()
 
     # ── Metrics: priority → live inference → metrics.json → hard-coded fallback
-    mape_str = "~8.3%"
     if y_true is not None and y_pred is not None:
         mae_hybrid  = mean_absolute_error(y_true, y_pred)
         rmse_hybrid = float(np.sqrt(mean_squared_error(y_true, y_pred)))
         r2_hybrid   = r2_score(y_true, y_pred)
         residuals   = y_true - y_pred
-        # Safe MAPE: skip samples where |T| ≤ 0.5 °C
-        mask = np.abs(y_true) > 0.5
-        if mask.sum() > 0:
-            mape_val = float(np.mean(np.abs((y_true[mask] - y_pred[mask]) / y_true[mask])) * 100)
-            mape_str = f"{mape_val:.2f}%"
     else:
         # Try pre-computed metrics from evaluate.py
         _metrics_path = "docs/metrics.json"
         if os.path.exists(_metrics_path):
             with open(_metrics_path) as _fh:
                 _m = json.load(_fh)
-            mae_hybrid  = float(_m.get("mae",  1.01))
-            rmse_hybrid = float(_m.get("rmse", 1.44))
-            r2_hybrid   = float(_m.get("r2",   0.9736))
-            _mape       = _m.get("mape", None)
-            mape_str    = f"{_mape:.2f}%" if isinstance(_mape, (int, float)) and not np.isnan(_mape) else "~8.3%"
+            mae_hybrid  = float(_m.get("mae",  1.80))
+            rmse_hybrid = float(_m.get("rmse", 2.25))
+            r2_hybrid   = float(_m.get("r2",   0.9351))
         else:
-            mae_hybrid, rmse_hybrid, r2_hybrid = 1.01, 1.44, 0.9736
+            mae_hybrid, rmse_hybrid, r2_hybrid = 1.80, 2.25, 0.9351
         residuals = None
 
     # ── Section 1: Metric Cards ───────────────────────────────────────────────
@@ -987,7 +1030,9 @@ elif page == "📈 Результаты":
     mc1.metric("MAE",  f"{mae_hybrid:.2f}°C",  help="Mean Absolute Error")
     mc2.metric("RMSE", f"{rmse_hybrid:.2f}°C", help="Root Mean Squared Error")
     mc3.metric("R²",   f"{r2_hybrid:.4f}",      help="Коэффициент детерминации")
-    mc4.metric("MAPE", mape_str,                help="Mean Absolute Percentage Error")
+    bias = residuals.mean() if residuals is not None else 0.0
+    mc4.metric("Bias (°C)", f"{bias:+.3f}°C",
+               help="Систематическое смещение прогноза. Близко к 0 = нет систематической ошибки")
 
     st.markdown("""
     > **Интерпретация:** R² = {r2:.4f} означает, что модель объясняет **{pct:.1f}%**

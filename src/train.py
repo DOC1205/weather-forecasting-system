@@ -72,9 +72,19 @@ class Trainer:
         self.batch_size   = batch_size
 
         self.criterion = nn.MSELoss()
-        self.optimizer = optim.Adam(model.parameters(), lr=learning_rate)
+        self.optimizer = optim.Adam(
+            model.parameters(),
+            lr=learning_rate,
+            weight_decay=1e-4,
+            betas=(0.9, 0.999),
+            eps=1e-8,
+        )
         self.scheduler = optim.lr_scheduler.ReduceLROnPlateau(
-            self.optimizer, mode="min", factor=0.5, patience=5
+            self.optimizer,
+            mode="min",
+            factor=0.5,
+            patience=7,
+            min_lr=1e-6,
         )
 
         self.history: dict = {"train_loss": [], "val_loss": [], "learning_rate": []}
@@ -162,6 +172,26 @@ class Trainer:
         return total_loss / len(self.val_loader)
 
     # ------------------------------------------------------------------
+    # Bias correction
+    # ------------------------------------------------------------------
+
+    def _compute_bias_correction(self) -> float:
+        """
+        Вычислить систематическое смещение на валидационной выборке.
+        Возвращает среднее (y_true - y_pred) в нормализованных единицах.
+        """
+        self.model.eval()
+        preds, targets = [], []
+        with torch.no_grad():
+            for X_batch, y_batch in self.val_loader:
+                X_batch = X_batch.to(self.device)
+                preds.append(self.model(X_batch).cpu().numpy())
+                targets.append(y_batch.numpy())
+        preds   = np.concatenate(preds).flatten()
+        targets = np.concatenate(targets).flatten()
+        return float(np.mean(targets - preds))
+
+    # ------------------------------------------------------------------
     # Main training loop
     # ------------------------------------------------------------------
 
@@ -183,7 +213,7 @@ class Trainer:
 
         best_val_loss    = float("inf")
         patience_counter = 0
-        max_patience     = 10
+        max_patience     = 15
         os.makedirs(save_dir, exist_ok=True)
 
         for epoch in range(1, num_epochs + 1):
@@ -215,6 +245,8 @@ class Trainer:
                     break
 
         print(f"\n[+] Training complete! Best val_loss: {best_val_loss:.6f}")
+        self.bias_correction = self._compute_bias_correction()
+        print(f"[+] Bias correction (val): {self.bias_correction:.6f}")
         self._save_history(f"{save_dir}/training_history.json")
 
     # ------------------------------------------------------------------
@@ -239,6 +271,7 @@ class Trainer:
                 "history":            self.history,
                 "model_type":         self.model_type,   # 'lstm' | 'hybrid'
                 "model_config":       self.model_config, # constructor kwargs
+                "bias_correction":    getattr(self, "bias_correction", 0.0),
                 "saved_at":           datetime.now().isoformat(),
             },
             filepath,
@@ -286,12 +319,12 @@ def build_model(model_type: str, n_features: int) -> tuple[nn.Module, dict]:
         config = {
             "input_size": n, "lstm_hidden": 128, "lstm_layers": 2,
             "tcn_channels": 64, "tcn_levels": 4, "transformer_d_model": 64,
-            "transformer_heads": 4, "transformer_layers": 2, "dropout": 0.2,
+            "transformer_heads": 4, "transformer_layers": 2, "dropout": 0.15,
         }
         model = HybridWeatherModel(
             input_size=n, lstm_hidden=128, lstm_layers=2,
             tcn_channels=64, tcn_levels=4, transformer_d_model=64,
-            transformer_heads=4, transformer_layers=2, dropout=0.2,
+            transformer_heads=4, transformer_layers=2, dropout=0.15,
         )
 
     else:
@@ -315,8 +348,8 @@ if __name__ == "__main__":
         help="Model architecture to train (default: hybrid)",
     )
     parser.add_argument(
-        "--epochs", type=int, default=50,
-        help="Maximum number of training epochs (default: 50)",
+        "--epochs", type=int, default=100,
+        help="Maximum number of training epochs (default: 100)",
     )
     parser.add_argument(
         "--lr", type=float, default=0.001,

@@ -6,7 +6,7 @@ This module is responsible for:
   2. Loading the last N hours from the local historical CSV (offline fallback).
   3. Applying feature engineering (cyclic temporal encodings) matching the
      training pipeline in src/preprocessing.py.
-  4. Normalising and packaging data into the exact tensor shape [1, 24, 10]
+  4. Normalising and packaging data into the exact tensor shape [1, 24, 11]
      expected by both WeatherLSTM and HybridWeatherModel.
 
 Usage:
@@ -41,10 +41,11 @@ FEATURE_COLUMNS = [
     "hour_cos",
     "month_sin",
     "month_cos",
-    "day_of_week",
+    "day_sin",
+    "day_cos",
 ]
 
-N_FEATURES = len(FEATURE_COLUMNS)   # 10
+N_FEATURES = len(FEATURE_COLUMNS)   # 11
 SEQUENCE_LENGTH = 24                # hours
 
 
@@ -123,19 +124,20 @@ def add_cyclic_features(df: pd.DataFrame) -> pd.DataFrame:
     Cyclic (sin/cos) encoding preserves the circular nature of time
     (e.g. hour 23 is close to hour 0), which plain integer encoding breaks.
 
-    Adds columns: hour_sin, hour_cos, month_sin, month_cos, day_of_week.
+    Adds columns: hour_sin, hour_cos, month_sin, month_cos, day_sin, day_cos.
 
     Args:
         df: DataFrame with a 'time' column of dtype datetime64.
 
     Returns:
-        Same DataFrame with the five new feature columns appended in-place.
+        Same DataFrame with the six new feature columns appended in-place.
     """
-    df["hour_sin"]    = np.sin(2 * np.pi * df["time"].dt.hour   / 24)
-    df["hour_cos"]    = np.cos(2 * np.pi * df["time"].dt.hour   / 24)
-    df["month_sin"]   = np.sin(2 * np.pi * df["time"].dt.month  / 12)
-    df["month_cos"]   = np.cos(2 * np.pi * df["time"].dt.month  / 12)
-    df["day_of_week"] = df["time"].dt.dayofweek.astype(float)
+    df["hour_sin"]  = np.sin(2 * np.pi * df["time"].dt.hour   / 24)
+    df["hour_cos"]  = np.cos(2 * np.pi * df["time"].dt.hour   / 24)
+    df["month_sin"] = np.sin(2 * np.pi * df["time"].dt.month  / 12)
+    df["month_cos"] = np.cos(2 * np.pi * df["time"].dt.month  / 12)
+    df["day_sin"]   = np.sin(2 * np.pi * df["time"].dt.dayofweek / 7)
+    df["day_cos"]   = np.cos(2 * np.pi * df["time"].dt.dayofweek / 7)
     return df
 
 
@@ -149,13 +151,14 @@ def add_cyclic_features_from_dt(obs: dict, dt: datetime) -> dict:
 
     Returns:
         The same dict with hour_sin, hour_cos, month_sin, month_cos,
-        day_of_week added.
+        day_sin, day_cos added.
     """
-    obs["hour_sin"]    = np.sin(2 * np.pi * dt.hour  / 24)
-    obs["hour_cos"]    = np.cos(2 * np.pi * dt.hour  / 24)
-    obs["month_sin"]   = np.sin(2 * np.pi * dt.month / 12)
-    obs["month_cos"]   = np.cos(2 * np.pi * dt.month / 12)
-    obs["day_of_week"] = float(dt.weekday())
+    obs["hour_sin"]  = np.sin(2 * np.pi * dt.hour      / 24)
+    obs["hour_cos"]  = np.cos(2 * np.pi * dt.hour      / 24)
+    obs["month_sin"] = np.sin(2 * np.pi * dt.month     / 12)
+    obs["month_cos"] = np.cos(2 * np.pi * dt.month     / 12)
+    obs["day_sin"]   = np.sin(2 * np.pi * dt.weekday() / 7)
+    obs["day_cos"]   = np.cos(2 * np.pi * dt.weekday() / 7)
     return obs
 
 
@@ -384,9 +387,8 @@ def compute_next_cyclic_features(base_time: datetime, step: int) -> dict:
     Compute normalised cyclic temporal features for a future time-step.
 
     Instead of re-running the scaler (which would require reconstructing all
-    10 features), we exploit the fact that cyclic (sin/cos) features always
+    11 features), we exploit the fact that cyclic (sin/cos) features always
     lie in [−1, 1], so MinMaxScaler maps them to [(x+1)/2].
-    day_of_week ∈ [0, 6] is mapped to x/6.
 
     Args:
         base_time: The datetime of the last known observation.
@@ -394,21 +396,23 @@ def compute_next_cyclic_features(base_time: datetime, step: int) -> dict:
 
     Returns:
         Dict with normalised values for hour_sin, hour_cos, month_sin,
-        month_cos, day_of_week at the target future time.
+        month_cos, day_sin, day_cos at the target future time.
     """
     future_dt = base_time + timedelta(hours=step)
-    h_sin = np.sin(2 * np.pi * future_dt.hour  / 24)
-    h_cos = np.cos(2 * np.pi * future_dt.hour  / 24)
-    m_sin = np.sin(2 * np.pi * future_dt.month / 12)
-    m_cos = np.cos(2 * np.pi * future_dt.month / 12)
-    dow   = float(future_dt.weekday())
+    h_sin = np.sin(2 * np.pi * future_dt.hour      / 24)
+    h_cos = np.cos(2 * np.pi * future_dt.hour      / 24)
+    m_sin = np.sin(2 * np.pi * future_dt.month     / 12)
+    m_cos = np.cos(2 * np.pi * future_dt.month     / 12)
+    d_sin = np.sin(2 * np.pi * future_dt.weekday() / 7)
+    d_cos = np.cos(2 * np.pi * future_dt.weekday() / 7)
 
     return {
-        "hour_sin":    (h_sin + 1) / 2,   # MinMaxScaler: (x - (-1)) / (1-(-1))
-        "hour_cos":    (h_cos + 1) / 2,
-        "month_sin":   (m_sin + 1) / 2,
-        "month_cos":   (m_cos + 1) / 2,
-        "day_of_week": dow / 6,            # MinMaxScaler: x / 6
+        "hour_sin":  (h_sin + 1) / 2,   # MinMaxScaler: (x - (-1)) / (1-(-1))
+        "hour_cos":  (h_cos + 1) / 2,
+        "month_sin": (m_sin + 1) / 2,
+        "month_cos": (m_cos + 1) / 2,
+        "day_sin":   (d_sin + 1) / 2,
+        "day_cos":   (d_cos + 1) / 2,
     }
 
 
@@ -510,6 +514,6 @@ if __name__ == "__main__":
 
     print("\n📊 Recent temperatures:")
     times, temps = get_recent_temperatures()
-    if times is not None:
+    if times is not None and temps is not None:
         for t, temp in zip(times.tail(5), temps.tail(5)):
             print(f"   {t}  →  {temp:.1f} °C")

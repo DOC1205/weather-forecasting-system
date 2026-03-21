@@ -24,7 +24,7 @@ astana = Point(51.1694, 71.4491, 347)
 
 # Период данных (последние 2 года)
 start = datetime(2024, 1, 1)
-end = datetime(2026, 1, 23)
+end = datetime(2026, 3, 21)
 
 print("🌍 Загрузка данных о погоде в Астане...")
 print(f"📆 Период: {start.date()} — {end.date()}")

@@ -46,6 +46,7 @@ class PositionalEncoding(nn.Module):
         pe[:, 0::2] = torch.sin(position * div_term)
         pe[:, 1::2] = torch.cos(position * div_term)
         pe = pe.unsqueeze(0)  # [1, max_len, d_model]
+        self.pe: torch.Tensor
         self.register_buffer("pe", pe)
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
@@ -185,7 +186,7 @@ class TransformerEncoderBranch(nn.Module):
     the 24-hour window.
 
     Args:
-        input_size:       Number of raw input features (10).
+        input_size:       Number of raw input features (11).
         d_model:          Internal embedding dimension (must be divisible by nhead).
         nhead:            Number of attention heads.
         num_layers:       Number of stacked TransformerEncoderLayer blocks.
@@ -244,7 +245,7 @@ class HybridWeatherModel(nn.Module):
     prediction head.
 
     Architecture summary:
-        Input [B, 24, 10]
+        Input [B, 24, 11]
             ├── LSTM branch   → [B, 128]
             ├── TCN branch    → [B,  64]
             └── Transformer   → [B,  64]
@@ -256,7 +257,7 @@ class HybridWeatherModel(nn.Module):
                Temperature prediction  [B, 1]
 
     Args:
-        input_size:          Number of input features (default 10).
+        input_size:          Number of input features (default 11).
         lstm_hidden:         LSTM hidden state dimension.
         lstm_layers:         Number of stacked LSTM layers.
         tcn_channels:        Channel width for TCN blocks.
@@ -269,7 +270,7 @@ class HybridWeatherModel(nn.Module):
 
     def __init__(
         self,
-        input_size: int = 10,
+        input_size: int = 11,
         lstm_hidden: int = 128,
         lstm_layers: int = 2,
         tcn_channels: int = 64,
@@ -339,16 +340,18 @@ class HybridWeatherModel(nn.Module):
             nn.Linear(32, 1),
         )
 
-    def forward(self, x: torch.Tensor) -> torch.Tensor:
+    def forward(self, x: torch.Tensor, return_gates: bool = False):
         """
         Forward pass through all three branches, gated fusion, and prediction head.
 
         Args:
-            x: Input tensor of shape [batch_size, sequence_length, input_size].
-               sequence_length = 24 hours, input_size = 10 features.
+            x:            Input tensor of shape [batch_size, sequence_length, input_size].
+                          sequence_length = 24 hours, input_size = 11 features.
+            return_gates: If True, also return gate weights as a numpy array [batch, 3].
 
         Returns:
             Predicted temperature offset (normalised), shape [batch_size, 1].
+            If return_gates=True, returns (prediction, gates_np) tuple.
         """
         # --- LSTM: take last hidden state of the top layer ---------------
         _, (h_n, _) = self.lstm(x)
@@ -370,7 +373,11 @@ class HybridWeatherModel(nn.Module):
             + gates[:, 2:3] * self.trans_proj(trans_feat)
         )                                # [B, fusion_dim]
 
-        return self.head(fused)          # [B, 1]
+        prediction = self.head(fused)    # [B, 1]
+
+        if return_gates:
+            return prediction, gates.detach().cpu().numpy()
+        return prediction
 
     def get_branch_weights(self, x: torch.Tensor) -> dict:
         """
@@ -416,7 +423,7 @@ def count_parameters(model: nn.Module) -> int:
 if __name__ == "__main__":
     print("🧪 Testing HybridWeatherModel …\n")
 
-    B, T, F = 8, 24, 10
+    B, T, F = 8, 24, 11
     x = torch.randn(B, T, F)
 
     model = HybridWeatherModel(input_size=F)

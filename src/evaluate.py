@@ -415,11 +415,12 @@ class ModelEvaluator:
         Args:
             save_path: Destination text file path.
         """
-        mape_str = (
-            f"{self.metrics['mape']:.2f}%"
-            if not np.isnan(self.metrics["mape"])
-            else "n/a (значения близки к нулю)"
-        )
+        mape_val = self.metrics["mape"]
+        if np.isnan(mape_val):
+            mape_str = "n/a (значения близки к нулю)"
+        else:
+            mape_note = " (некорректна для рядов с T≈0°C)" if mape_val > 20 else ""
+            mape_str = f"{mape_val:.2f}%{mape_note}"
         quality = (
             "Отличная" if self.metrics["r2"] > 0.90
             else "Хорошая" if self.metrics["r2"] > 0.80
