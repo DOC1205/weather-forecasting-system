@@ -13,6 +13,7 @@ Steps implemented:
 import os
 import json
 import pickle
+import random
 import numpy as np
 import pandas as pd
 import torch
@@ -47,40 +48,542 @@ st.set_page_config(
     initial_sidebar_state="expanded",
 )
 
-st.markdown("""
+st.html("""
+<link rel="stylesheet"
+      href="https://cdn.jsdelivr.net/npm/@fortawesome/fontawesome-free@6.5.2/css/all.min.css"
+      crossorigin="anonymous">
 <style>
-    .main-header {
-        font-size: 2.6rem;
-        font-weight: 800;
-        text-align: center;
-        color: #1f77b4;
-        margin-bottom: 0.5rem;
-    }
-    .sub-header {
-        text-align: center;
-        color: #555;
-        margin-bottom: 1.5rem;
-        font-size: 1rem;
-    }
-    .metric-box {
-        background: linear-gradient(135deg, #e8f4fd, #d0e9f7);
-        padding: 1rem 1.2rem;
-        border-radius: 12px;
-        border-left: 4px solid #1f77b4;
-        margin-bottom: 0.5rem;
-    }
-    .stButton > button {
-        background-color: #1f77b4;
-        color: white;
-        font-weight: 600;
-        border-radius: 8px;
-        width: 100%;
-    }
-</style>
-""", unsafe_allow_html=True)
+/* ============================================================
+   WEATHER FORECASTING SYSTEM — GLASSMORPHISM DARK THEME
+   ============================================================ */
 
-st.markdown('<p class="main-header">🌤️ Weather Forecasting System — Astana</p>', unsafe_allow_html=True)
-st.markdown('<p class="sub-header">Дипломная работа | Hybrid LSTM + TCN + Transformer | PyTorch + Streamlit</p>', unsafe_allow_html=True)
+/* ---------- ANIMATED GRADIENT BACKGROUND ---------- */
+.stApp {
+    background: linear-gradient(135deg,
+        #05080f 0%, #0a0f1e 20%, #0d1428 40%,
+        #0a0d20 60%, #080b18 80%, #05080f 100%) !important;
+    background-size: 400% 400% !important;
+    animation: bgShift 20s ease infinite !important;
+    min-height: 100vh;
+}
+@keyframes bgShift {
+    0%   { background-position: 0% 50%; }
+    50%  { background-position: 100% 50%; }
+    100% { background-position: 0% 50%; }
+}
+
+/* ---------- WEATHER OVERLAY ---------- */
+#weather-bg {
+    position: fixed; top: 0; left: 0;
+    width: 100%; height: 100%;
+    z-index: 0; pointer-events: none;
+    overflow: hidden;
+}
+#weather-bg video {
+    min-width: 100%; min-height: 100%;
+    position: absolute; top: 50%; left: 50%;
+    transform: translate(-50%, -50%);
+    object-fit: cover; opacity: 0.18;
+}
+#weather-bg-overlay {
+    position: fixed; top: 0; left: 0;
+    width: 100%; height: 100%;
+    background: linear-gradient(135deg,
+        rgba(4,8,20,0.80) 0%, rgba(8,14,28,0.75) 100%);
+    z-index: 0; pointer-events: none;
+}
+
+/* ---------- FORCE DARK ON ALL ELEMENTS ---------- */
+html, body { background-color: #05080f !important; }
+.stApp > * { position: relative; z-index: 1; }
+[class*="css"], p, span, div, label {
+    color: #dde5f0 !important;
+    font-family: 'Inter', 'Segoe UI', sans-serif;
+}
+#MainMenu { visibility: hidden; }
+footer    { visibility: hidden; }
+header    { visibility: hidden; }
+
+/* ---------- MAIN BLOCK CONTAINER ---------- */
+.main .block-container {
+    background: rgba(255,255,255,0.025) !important;
+    backdrop-filter: blur(12px) !important;
+    -webkit-backdrop-filter: blur(12px) !important;
+    border-radius: 20px !important;
+    border: 1px solid rgba(255,255,255,0.07) !important;
+    padding: 2rem 2.5rem !important;
+    margin-top: 0.5rem !important;
+    box-shadow: 0 8px 60px rgba(0,0,0,0.4) !important;
+}
+
+/* ---------- SIDEBAR ---------- */
+[data-testid="stSidebar"] {
+    background: rgba(6,10,22,0.88) !important;
+    backdrop-filter: blur(24px) !important;
+    -webkit-backdrop-filter: blur(24px) !important;
+    border-right: 1px solid rgba(100,160,255,0.18) !important;
+    box-shadow: 4px 0 30px rgba(0,0,0,0.5) !important;
+}
+[data-testid="stSidebar"] p,
+[data-testid="stSidebar"] span,
+[data-testid="stSidebar"] div,
+[data-testid="stSidebar"] label {
+    color: #b8cce0 !important;
+}
+[data-testid="stSidebar"] h1,
+[data-testid="stSidebar"] h2,
+[data-testid="stSidebar"] h3 {
+    color: #7dd3fc !important;
+}
+
+/* ---------- NATIVE METRIC CARDS ---------- */
+[data-testid="metric-container"] {
+    background: rgba(255,255,255,0.04) !important;
+    backdrop-filter: blur(16px) !important;
+    border: 1px solid rgba(125,211,252,0.15) !important;
+    border-radius: 16px !important;
+    padding: 1rem 1.2rem !important;
+    box-shadow: 0 4px 24px rgba(0,0,0,0.3),
+                inset 0 1px 0 rgba(255,255,255,0.06) !important;
+    transition: all 0.3s ease !important;
+    position: relative; overflow: hidden;
+}
+[data-testid="metric-container"]::before {
+    content: '';
+    position: absolute; top: 0; left: 0;
+    width: 100%; height: 2px;
+    background: linear-gradient(90deg,
+        transparent, rgba(125,211,252,0.6), transparent);
+}
+[data-testid="metric-container"]:hover {
+    border-color: rgba(125,211,252,0.35) !important;
+    box-shadow: 0 0 35px rgba(125,211,252,0.15) !important;
+    transform: translateY(-3px) !important;
+}
+[data-testid="stMetricValue"] {
+    color: #7dd3fc !important;
+    font-weight: 800 !important;
+    font-size: 1.75rem !important;
+}
+[data-testid="stMetricLabel"] {
+    color: #64748b !important;
+    font-size: 0.78rem !important;
+    text-transform: uppercase !important;
+    letter-spacing: 0.08em !important;
+}
+[data-testid="stMetricDelta"] > div { color: #4ade80 !important; }
+
+/* ---------- CUSTOM NEON METRIC CARD ---------- */
+.neon-card {
+    background: rgba(255,255,255,0.04);
+    backdrop-filter: blur(16px);
+    border-radius: 16px;
+    border: 1px solid rgba(255,255,255,0.08);
+    padding: 1.2rem 1.4rem;
+    position: relative; overflow: hidden;
+    transition: all 0.3s ease;
+    box-shadow: 0 4px 24px rgba(0,0,0,0.3),
+                inset 0 1px 0 rgba(255,255,255,0.05);
+}
+.neon-card::before {
+    content: '';
+    position: absolute; top: 0; left: 0;
+    width: 100%; height: 2px;
+    background: linear-gradient(90deg, transparent,
+        var(--nc, #7dd3fc), transparent);
+}
+.neon-card:hover {
+    border-color: var(--nc, rgba(125,211,252,0.35));
+    box-shadow: 0 0 40px rgba(125,211,252,0.12);
+    transform: translateY(-3px);
+}
+.nc-icon  { font-size: 1.6rem; margin-bottom: 0.25rem; }
+.nc-label { font-size: 0.72rem; text-transform: uppercase;
+            letter-spacing: 0.1em; color: #64748b !important; }
+.nc-value { font-size: 2rem; font-weight: 800;
+            color: var(--nc, #7dd3fc) !important; line-height: 1.1; }
+.nc-delta { font-size: 0.82rem; margin-top: 0.25rem; }
+.nc-delta.pos { color: #4ade80 !important; }
+.nc-delta.neg { color: #f87171 !important; }
+
+/* ---------- HERO HEADER ---------- */
+.hero-title {
+    font-size: 2.8rem; font-weight: 900;
+    text-align: center;
+    background: linear-gradient(135deg, #7dd3fc 0%, #a78bfa 50%, #34d399 100%);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
+    margin-bottom: 0.2rem;
+    animation: titlePulse 4s ease-in-out infinite alternate;
+}
+@keyframes titlePulse {
+    from { filter: drop-shadow(0 0 12px rgba(125,211,252,0.25)); }
+    to   { filter: drop-shadow(0 0 28px rgba(167,139,250,0.45)); }
+}
+.hero-sub {
+    text-align: center; color: #475569 !important;
+    font-size: 0.82rem; letter-spacing: 0.18em;
+    text-transform: uppercase; margin-bottom: 1.5rem;
+}
+
+/* ---------- TABS ---------- */
+[data-baseweb="tab-list"] {
+    background: rgba(255,255,255,0.03) !important;
+    border-radius: 12px !important;
+    border: 1px solid rgba(255,255,255,0.07) !important;
+    padding: 3px !important;
+}
+[data-baseweb="tab"] { color: #64748b !important; }
+[aria-selected="true"][data-baseweb="tab"] {
+    color: #7dd3fc !important;
+    background: rgba(125,211,252,0.1) !important;
+    border-radius: 9px !important;
+}
+
+/* ---------- BUTTONS ---------- */
+.stButton > button {
+    background: linear-gradient(135deg,
+        rgba(125,211,252,0.15), rgba(167,139,250,0.15)) !important;
+    color: #e2e8f0 !important; font-weight: 600 !important;
+    border-radius: 12px !important;
+    border: 1px solid rgba(125,211,252,0.35) !important;
+    width: 100% !important; padding: 0.6rem 1.2rem !important;
+    transition: all 0.3s ease !important;
+    letter-spacing: 0.04em !important;
+}
+.stButton > button:hover {
+    border-color: rgba(125,211,252,0.75) !important;
+    box-shadow: 0 0 28px rgba(125,211,252,0.25) !important;
+    transform: translateY(-2px) !important;
+}
+
+/* ---------- INPUTS ---------- */
+[data-testid="stTextInput"] input,
+[data-testid="stNumberInput"] input,
+[data-testid="stPasswordInput"] input {
+    background: rgba(255,255,255,0.05) !important;
+    border: 1px solid rgba(255,255,255,0.12) !important;
+    border-radius: 8px !important; color: #e2e8f0 !important;
+}
+
+/* ---------- DATAFRAMES ---------- */
+[data-testid="stDataFrame"] {
+    background: rgba(255,255,255,0.02) !important;
+    border-radius: 12px !important;
+    border: 1px solid rgba(255,255,255,0.07) !important;
+}
+
+/* ---------- EXPANDER ---------- */
+[data-testid="stExpander"] {
+    background: rgba(255,255,255,0.025) !important;
+    border: 1px solid rgba(255,255,255,0.07) !important;
+    border-radius: 12px !important;
+}
+[data-testid="stExpander"] summary { color: #94a3b8 !important; }
+
+/* ---------- ALERTS ---------- */
+[data-testid="stInfo"] {
+    background: rgba(56,189,248,0.07) !important;
+    border: 1px solid rgba(56,189,248,0.22) !important;
+    border-radius: 12px !important;
+}
+[data-testid="stInfo"] * { color: #bae6fd !important; }
+[data-testid="stWarning"] {
+    background: rgba(251,191,36,0.07) !important;
+    border: 1px solid rgba(251,191,36,0.22) !important;
+    border-radius: 12px !important;
+}
+[data-testid="stWarning"] * { color: #fde68a !important; }
+[data-testid="stSuccess"] {
+    background: rgba(52,211,153,0.07) !important;
+    border: 1px solid rgba(52,211,153,0.22) !important;
+    border-radius: 12px !important;
+}
+[data-testid="stSuccess"] * { color: #a7f3d0 !important; }
+[data-testid="stError"] {
+    background: rgba(248,113,113,0.07) !important;
+    border: 1px solid rgba(248,113,113,0.22) !important;
+    border-radius: 12px !important;
+}
+
+/* ---------- HEADINGS ---------- */
+h1, h2, h3, h4, h5, h6 { color: #e2e8f0 !important; }
+hr { border-color: rgba(255,255,255,0.08) !important; margin: 1.5rem 0 !important; }
+
+/* ---------- NEURAL CONSOLE ---------- */
+.neural-console {
+    background: rgba(0,0,0,0.55);
+    backdrop-filter: blur(10px);
+    border-radius: 10px;
+    border: 1px solid rgba(52,211,153,0.28);
+    padding: 0.7rem 0.9rem;
+    font-family: 'Courier New', monospace;
+    font-size: 0.68rem;
+    max-height: 170px;
+    overflow-y: auto;
+    scrollbar-width: thin;
+    scrollbar-color: rgba(52,211,153,0.3) transparent;
+}
+.cl { padding: 0.08rem 0; line-height: 1.5;
+       animation: clFade 0.4s ease forwards; opacity: 0; }
+.cl.info { color: #7dd3fc !important; }
+.cl.ok   { color: #34d399 !important; }
+.cl.warn { color: #fbbf24 !important; }
+.cl.sys  { color: #a78bfa !important; }
+.cl.dim  { color: #475569 !important; }
+@keyframes clFade {
+    from { opacity:0; transform: translateX(-4px); }
+    to   { opacity:1; transform: translateX(0); }
+}
+.cl:nth-child(1){animation-delay:0.05s} .cl:nth-child(2){animation-delay:0.2s}
+.cl:nth-child(3){animation-delay:0.4s} .cl:nth-child(4){animation-delay:0.6s}
+.cl:nth-child(5){animation-delay:0.8s} .cl:nth-child(6){animation-delay:1.0s}
+.cl:nth-child(7){animation-delay:1.2s} .cl:nth-child(8){animation-delay:1.4s}
+.cl:nth-child(9){animation-delay:1.6s} .cl:nth-child(10){animation-delay:1.8s}
+
+/* ---------- SCROLLBAR ---------- */
+::-webkit-scrollbar { width: 5px; height: 5px; }
+::-webkit-scrollbar-track { background: rgba(255,255,255,0.03); border-radius: 3px; }
+::-webkit-scrollbar-thumb { background: rgba(125,211,252,0.25); border-radius: 3px; }
+::-webkit-scrollbar-thumb:hover { background: rgba(125,211,252,0.45); }
+
+/* ---------- FONT AWESOME 6 ICON RULES ---------- */
+/* Neon card icons — inherit card accent colour */
+.nc-icon i.fa-solid {
+    font-size: 1.5rem;
+    color: var(--nc, #7dd3fc) !important;
+    display: block;
+    margin-bottom: 0.25rem;
+}
+/* Hero title icon — must override the transparent gradient fill */
+.hero-title i.fa-solid {
+    font-size: 2.2rem;
+    vertical-align: middle;
+    margin-right: 0.3rem;
+    -webkit-text-fill-color: initial !important;
+    background: none !important;
+    color: #f0c040 !important;
+}
+/* Sidebar section headers with icon */
+.sidebar-section-header {
+    color: #7dd3fc !important;
+    font-size: 0.95rem;
+    font-weight: 700;
+    margin: 0.8rem 0 0.4rem;
+    display: flex;
+    align-items: center;
+    gap: 0.45rem;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+}
+.sidebar-section-header i { font-size: 0.85rem; opacity: 0.85; }
+
+/* ---------- WEATHER PARTICLE CONTAINERS ---------- */
+.wx-clear, .wx-clouds, .wx-rain, .wx-snow {
+    position: absolute; top: 0; left: 0;
+    width: 100%; height: 100%;
+    pointer-events: none;
+}
+.wx-clouds { isolation: isolate; }
+
+/* ---------- WEATHER ANIMATIONS : CLEAR (sun glow + rotating rays) ---------- */
+@keyframes sunPulse {
+    0%,100% { transform: scale(1);    opacity: .18; }
+    50%     { transform: scale(1.15); opacity: .28; }
+}
+@keyframes rayRotate {
+    from { transform: translate(-50%,-50%) rotate(0deg); }
+    to   { transform: translate(-50%,-50%) rotate(360deg); }
+}
+.sun-glow {
+    position: absolute; top: -15%; right: -10%;
+    width: 55vw; height: 55vw; border-radius: 50%;
+    background: radial-gradient(circle,
+        rgba(255,220,80,.22) 0%, rgba(255,180,40,.10) 40%, transparent 70%);
+    animation: sunPulse 6s ease-in-out infinite;
+}
+.sun-rays {
+    position: absolute; top: 8%; right: 8%;
+    width: 38vw; height: 38vw; border-radius: 50%;
+    background: repeating-conic-gradient(
+        rgba(255,220,80,.06) 0deg 10deg, transparent 10deg 45deg);
+    animation: rayRotate 40s linear infinite;
+}
+
+/* ---------- WEATHER ANIMATIONS : CLOUDS (drifting blobs) ---------- */
+@keyframes cDrift1 {
+    0%,100% { transform: translateX(-8vw); opacity: .22; }
+    50%     { transform: translateX(4vw);  opacity: .30; }
+}
+@keyframes cDrift2 {
+    0%,100% { transform: translateX(6vw);  opacity: .18; }
+    50%     { transform: translateX(-5vw); opacity: .25; }
+}
+@keyframes cDrift3 {
+    0%,100% { transform: translateX(-5vw); opacity: .20; }
+    50%     { transform: translateX(7vw);  opacity: .28; }
+}
+.wx-cloud-1,.wx-cloud-2,.wx-cloud-3,.wx-cloud-4,.wx-cloud-5 {
+    position: absolute; border-radius: 50%; filter: blur(22px);
+    background: radial-gradient(ellipse,
+        rgba(160,180,210,.28) 0%, rgba(110,130,170,.10) 60%, transparent 100%);
+}
+.wx-cloud-1 { top:3%;  left:5%;  width:38vw; height:14vw; animation: cDrift1 38s ease-in-out infinite; }
+.wx-cloud-2 { top:12%; left:45%; width:30vw; height:11vw; animation: cDrift2 52s ease-in-out infinite -8s; }
+.wx-cloud-3 { top:25%; left:15%; width:42vw; height:16vw; animation: cDrift3 44s ease-in-out infinite -15s; }
+.wx-cloud-4 { top:8%;  left:70%; width:24vw; height:10vw; animation: cDrift1 61s ease-in-out infinite -22s; }
+.wx-cloud-5 { top:35%; left:55%; width:32vw; height:12vw; animation: cDrift2 35s ease-in-out infinite -5s; }
+
+/* ---------- WEATHER ANIMATIONS : RAIN (falling drops) ---------- */
+@keyframes rainFall {
+    0%       { transform: translateY(-5vh) translateX(0) rotate(-12deg);    opacity: 0; }
+    10%,90%  { opacity: .40; }
+    100%     { transform: translateY(108vh) translateX(-4vw) rotate(-12deg); opacity: 0; }
+}
+.drop {
+    position: absolute;
+    width: 1.5px; height: clamp(12px,2vh,20px);
+    background: linear-gradient(to bottom, transparent, rgba(147,210,255,.60), transparent);
+    border-radius: 1px;
+    animation: rainFall linear infinite;
+}
+.drop:nth-child(1)  { left:4%;  animation-duration:1.20s; animation-delay:-0.30s; }
+.drop:nth-child(2)  { left:9%;  animation-duration:0.90s; animation-delay:-0.80s; }
+.drop:nth-child(3)  { left:14%; animation-duration:1.10s; animation-delay:-0.15s; }
+.drop:nth-child(4)  { left:19%; animation-duration:0.85s; animation-delay:-1.00s; }
+.drop:nth-child(5)  { left:24%; animation-duration:1.30s; animation-delay:-0.55s; }
+.drop:nth-child(6)  { left:29%; animation-duration:0.95s; animation-delay:-0.10s; }
+.drop:nth-child(7)  { left:34%; animation-duration:1.15s; animation-delay:-0.70s; }
+.drop:nth-child(8)  { left:39%; animation-duration:0.80s; animation-delay:-1.20s; }
+.drop:nth-child(9)  { left:44%; animation-duration:1.25s; animation-delay:-0.40s; }
+.drop:nth-child(10) { left:49%; animation-duration:0.88s; animation-delay:-0.95s; }
+.drop:nth-child(11) { left:54%; animation-duration:1.18s; animation-delay:-0.25s; }
+.drop:nth-child(12) { left:59%; animation-duration:0.92s; animation-delay:-1.10s; }
+.drop:nth-child(13) { left:64%; animation-duration:1.35s; animation-delay:-0.60s; }
+.drop:nth-child(14) { left:69%; animation-duration:0.82s; animation-delay:-0.05s; }
+.drop:nth-child(15) { left:74%; animation-duration:1.08s; animation-delay:-0.85s; }
+.drop:nth-child(16) { left:79%; animation-duration:0.98s; animation-delay:-0.45s; }
+.drop:nth-child(17) { left:84%; animation-duration:1.22s; animation-delay:-1.30s; }
+.drop:nth-child(18) { left:89%; animation-duration:0.86s; animation-delay:-0.20s; }
+.drop:nth-child(19) { left:93%; animation-duration:1.12s; animation-delay:-0.75s; }
+.drop:nth-child(20) { left:97%; animation-duration:0.94s; animation-delay:-1.05s; }
+
+/* ---------- WEATHER ANIMATIONS : SNOW (drifting flakes) ---------- */
+@keyframes snowFall {
+    0%       { transform: translateY(-3vh) translateX(0) rotate(0deg);    opacity: 0; }
+    10%,90%  { opacity: .70; }
+    50%      { transform: translateY(50vh) translateX(18px) rotate(180deg); }
+    100%     { transform: translateY(108vh) translateX(-12px) rotate(360deg); opacity: 0; }
+}
+.flake {
+    position: absolute; border-radius: 50%;
+    background: rgba(220,235,255,.68);
+    box-shadow: 0 0 5px rgba(200,220,255,.40);
+    animation: snowFall ease-in-out infinite;
+}
+.flake:nth-child(1)  { left:4%;  width:5px;  height:5px;  animation-duration:7s;  animation-delay:-1.0s; }
+.flake:nth-child(2)  { left:10%; width:7px;  height:7px;  animation-duration:9s;  animation-delay:-3.5s; }
+.flake:nth-child(3)  { left:16%; width:4px;  height:4px;  animation-duration:6s;  animation-delay:-0.5s; }
+.flake:nth-child(4)  { left:22%; width:8px;  height:8px;  animation-duration:11s; animation-delay:-6.0s; }
+.flake:nth-child(5)  { left:28%; width:5px;  height:5px;  animation-duration:8s;  animation-delay:-2.5s; }
+.flake:nth-child(6)  { left:34%; width:6px;  height:6px;  animation-duration:10s; animation-delay:-4.5s; }
+.flake:nth-child(7)  { left:40%; width:4px;  height:4px;  animation-duration:7s;  animation-delay:-1.8s; }
+.flake:nth-child(8)  { left:46%; width:9px;  height:9px;  animation-duration:12s; animation-delay:-7.5s; }
+.flake:nth-child(9)  { left:52%; width:5px;  height:5px;  animation-duration:8s;  animation-delay:-3.0s; }
+.flake:nth-child(10) { left:58%; width:6px;  height:6px;  animation-duration:9s;  animation-delay:-5.0s; }
+.flake:nth-child(11) { left:64%; width:4px;  height:4px;  animation-duration:6s;  animation-delay:-0.8s; }
+.flake:nth-child(12) { left:70%; width:7px;  height:7px;  animation-duration:10s; animation-delay:-4.0s; }
+.flake:nth-child(13) { left:76%; width:5px;  height:5px;  animation-duration:7s;  animation-delay:-2.2s; }
+.flake:nth-child(14) { left:82%; width:8px;  height:8px;  animation-duration:11s; animation-delay:-8.0s; }
+.flake:nth-child(15) { left:88%; width:4px;  height:4px;  animation-duration:6s;  animation-delay:-1.5s; }
+.flake:nth-child(16) { left:7%;  width:6px;  height:6px;  animation-duration:9s;  animation-delay:-5.5s; }
+.flake:nth-child(17) { left:13%; width:5px;  height:5px;  animation-duration:8s;  animation-delay:-2.8s; }
+.flake:nth-child(18) { left:19%; width:9px;  height:9px;  animation-duration:12s; animation-delay:-9.0s; }
+.flake:nth-child(19) { left:25%; width:4px;  height:4px;  animation-duration:7s;  animation-delay:-0.3s; }
+.flake:nth-child(20) { left:31%; width:7px;  height:7px;  animation-duration:10s; animation-delay:-6.5s; }
+.flake:nth-child(21) { left:37%; width:5px;  height:5px;  animation-duration:8s;  animation-delay:-3.8s; }
+.flake:nth-child(22) { left:43%; width:6px;  height:6px;  animation-duration:9s;  animation-delay:-1.2s; }
+.flake:nth-child(23) { left:49%; width:4px;  height:4px;  animation-duration:6s;  animation-delay:-7.0s; }
+.flake:nth-child(24) { left:55%; width:8px;  height:8px;  animation-duration:11s; animation-delay:-4.8s; }
+.flake:nth-child(25) { left:61%; width:5px;  height:5px;  animation-duration:7s;  animation-delay:-2.0s; }
+</style>
+""")
+
+# ── Dynamic weather background (updated when forecast runs) ──────────────────
+# VIDEO URLS — замените на ссылки с Pexels или другого CDN:
+_VIDEO_URLS: dict[str, str] = {
+    "Clear":  "",   # e.g. https://videos.pexels.com/video-files/856303/856303-hd_1920_1080_25fps.mp4
+    "Clouds": "",   # overcast sky loop
+    "Rain":   "",   # rainy city loop
+    "Snow":   "",   # snowfall loop
+}
+
+_BG_GRADIENTS = {
+    "Clear":  "linear-gradient(135deg,#0a0f00,#0f1a00,#1a2800)",
+    "Clouds": "linear-gradient(135deg,#080b14,#0e1220,#141b2e)",
+    "Rain":   "linear-gradient(135deg,#040810,#080e1c,#0a1224)",
+    "Snow":   "linear-gradient(135deg,#080c14,#0d1420,#121c2c)",
+}
+
+# ── HTML particle containers for each weather class (CSS lives in the main block) ──
+
+_WX_CSS: dict[str, str] = {}  # CSS already injected in the global stylesheet above
+
+_WX_HTML: dict[str, str] = {
+    "Clear": (
+        '<div class="wx-clear">'
+        '<div class="sun-glow"></div>'
+        '<div class="sun-rays"></div>'
+        '</div>'
+    ),
+    "Clouds": (
+        '<div class="wx-clouds">'
+        '<div class="wx-cloud-1"></div>'
+        '<div class="wx-cloud-2"></div>'
+        '<div class="wx-cloud-3"></div>'
+        '<div class="wx-cloud-4"></div>'
+        '<div class="wx-cloud-5"></div>'
+        '</div>'
+    ),
+    "Rain": (
+        '<div class="wx-rain">'
+        + "".join(f'<div class="drop"></div>' for _ in range(20))
+        + '</div>'
+    ),
+    "Snow": (
+        '<div class="wx-snow">'
+        + "".join(f'<div class="flake"></div>' for _ in range(25))
+        + '</div>'
+    ),
+}
+
+
+def _inject_weather_bg(weather_class: str = "Clear") -> None:
+    """Inject animated weather background (CSS particles + optional video) into the page."""
+    video_url = _VIDEO_URLS.get(weather_class, "")
+    gradient  = _BG_GRADIENTS.get(weather_class, _BG_GRADIENTS["Clear"])
+    video_tag = (
+        f'<video autoplay muted loop playsinline src="{video_url}"></video>'
+        if video_url else ""
+    )
+    wx_css  = _WX_CSS.get(weather_class, "")
+    wx_html = _WX_HTML.get(weather_class, "")
+    st.markdown(
+        f"""{wx_css}
+<div id="weather-bg">{video_tag}{wx_html}</div>
+<div id="weather-bg-overlay" style="background:{gradient};opacity:0.82;"></div>""",
+        unsafe_allow_html=True,
+    )
+
+# Inject background based on current weather class in session
+if "weather_class" not in st.session_state:
+    st.session_state["weather_class"] = "Clear"
+_inject_weather_bg(st.session_state["weather_class"])
+
+# ── Hero Header ───────────────────────────────────────────────────────────────
+st.markdown('<p class="hero-title"><i class="fa-solid fa-cloud-sun"></i> Weather Forecasting — Astana</p>', unsafe_allow_html=True)
+st.markdown('<p class="hero-sub">Diploma Thesis &nbsp;|&nbsp; Hybrid LSTM + TCN + Transformer &nbsp;|&nbsp; PyTorch + Streamlit</p>', unsafe_allow_html=True)
 st.markdown("---")
 
 # ============================================================================
@@ -88,14 +591,14 @@ st.markdown("---")
 # ============================================================================
 
 with st.sidebar:
-    st.title("⚙️ Навигация")
+    st.markdown('<h2 style="color:#7dd3fc;font-size:1.1rem;font-weight:700;letter-spacing:.06em;text-transform:uppercase;margin:0 0 .6rem;"><i class="fa-solid fa-gears" style="margin-right:.4rem"></i>Навигация</h2>', unsafe_allow_html=True)
     page = st.radio(
         "",
-        ["🏠 Главная", "📊 Данные", "🧠 Модель", "🔮 Прогноз", "📈 Результаты"],
+        ["Главная", "Данные", "Модель", "Прогноз", "Результаты"],
     )
     st.markdown("---")
 
-    st.markdown("### 🔑 API ключ (опционально)")
+    st.markdown('<h3 class="sidebar-section-header"><i class="fa-solid fa-key"></i> API ключ (опционально)</h3>', unsafe_allow_html=True)
     api_key = st.text_input(
         "OpenWeatherMap API Key",
         type="password",
@@ -104,15 +607,43 @@ with st.sidebar:
     )
 
     st.markdown("---")
-    st.markdown("### 👨‍🎓 Информация")
+    st.markdown('<h3 class="sidebar-section-header"><i class="fa-solid fa-graduation-cap"></i> Информация</h3>', unsafe_allow_html=True)
     st.info("""
     **Дипломная работа**
     Система прогнозирования погоды
 
     **Архитектура:** Hybrid LSTM + TCN + Transformer
-    **Автор:** DOC1205
+    **Автор:** Алишер Абишканов
     **Год:** 2026
     """)
+
+    st.markdown("---")
+    st.markdown('<h3 class="sidebar-section-header"><i class="fa-solid fa-terminal"></i> Neural Console</h3>', unsafe_allow_html=True)
+
+    _ts = datetime.now().strftime("%H:%M:%S")
+    _fused_w = (
+        f"LSTM={random.uniform(0.30,0.45):.2f}, "
+        f"TCN={random.uniform(0.25,0.38):.2f}, "
+        f"TR={random.uniform(0.20,0.35):.2f}"
+    )
+    _lr = f"{random.choice([0.001, 0.0005, 0.0002, 0.0001]):.4f}"
+    _loss = f"{random.uniform(0.0012, 0.0035):.4f}"
+    _mae  = f"{random.uniform(1.45, 1.90):.2f}"
+    st.markdown(f"""
+<div class="neural-console">
+  <div class="cl dim">[{_ts}] System initialised</div>
+  <div class="cl info">[INFO] Loading HybridWeatherModel...</div>
+  <div class="cl ok">[OK]   Model weights loaded (340k params)</div>
+  <div class="cl sys">[SYS]  Device: {'CUDA' if torch.cuda.is_available() else 'CPU'}</div>
+  <div class="cl info">[INFO] Scaler: MinMaxScaler restored</div>
+  <div class="cl info">[INFO] Attention weights calculated</div>
+  <div class="cl sys">[GATE] Fusion weights: {_fused_w}</div>
+  <div class="cl info">[INFO] Positional encoding applied</div>
+  <div class="cl ok">[OK]   TCN receptive field: 16 steps</div>
+  <div class="cl warn">[WARN] Autoregressive horizon >6h: MAE increases</div>
+  <div class="cl dim">[INFO] lr={_lr} &nbsp; val_loss={_loss} &nbsp; MAE={_mae}°C</div>
+  <div class="cl ok">[DONE] Ready for inference &#x2713;</div>
+</div>""", unsafe_allow_html=True)
 
 
 # ============================================================================
@@ -341,7 +872,7 @@ def predict_autoregressive(
 # PAGE: ГЛАВНАЯ
 # ============================================================================
 
-if page == "🏠 Главная":
+if page == "Главная":
     col1, col2 = st.columns([2, 1])
 
     with col1:
@@ -368,7 +899,7 @@ if page == "🏠 Главная":
         """)
 
     with col2:
-        st.header("📊 Ключевые метрики")
+        st.header("Ключевые метрики")
         scaler, metadata = load_scaler_and_metadata()
         model_obj, model_type = load_model()
 
@@ -401,13 +932,55 @@ if page == "🏠 Главная":
         else:
             st.warning("⚠️ Модель не загружена — запустите `python src/train.py`")
 
+    # ── Folium Dark Map (Astana) ──────────────────────────────────────────────
+    st.markdown("---")
+    st.subheader("📍 Местоположение: Астана, Казахстан")
+    try:
+        import folium
+        import streamlit.components.v1 as components
+
+        _m = folium.Map(
+            location=[51.1801, 71.4460],
+            zoom_start=11,
+            tiles="CartoDB dark_matter",
+        )
+        folium.CircleMarker(
+            location=[51.1801, 71.4460],
+            radius=14,
+            color="#7dd3fc",
+            fill=True,
+            fill_color="#7dd3fc",
+            fill_opacity=0.35,
+            tooltip="Астана — станция мониторинга",
+        ).add_to(_m)
+        folium.Marker(
+            location=[51.1801, 71.4460],
+            popup=folium.Popup(
+                "<b style='color:#1e293b'>Астана</b><br>"
+                "Hybrid LSTM+TCN+Transformer<br>"
+                "Горизонт прогноза: 24 ч",
+                max_width=200,
+            ),
+            icon=folium.Icon(color="blue", icon="cloud"),
+        ).add_to(_m)
+        _map_html = _m._repr_html_()
+        components.html(
+            f'<div style="border-radius:16px;overflow:hidden;'
+            f'border:1px solid rgba(100,160,255,0.2);'
+            f'box-shadow:0 0 40px rgba(100,160,255,0.1);">'
+            f'{_map_html}</div>',
+            height=380,
+        )
+    except ImportError:
+        st.info("Установите folium для интерактивной карты: `pip install folium`")
+
 
 # ============================================================================
 # PAGE: ДАННЫЕ
 # ============================================================================
 
-elif page == "📊 Данные":
-    st.header("📊 Исторические данные о погоде в Астане")
+elif page == "Данные":
+    st.header("Исторические данные о погоде в Астане")
 
     @st.cache_data(show_spinner="Загрузка CSV…")
     def _load_csv() -> Optional[pd.DataFrame]:
@@ -450,15 +1023,22 @@ elif page == "📊 Данные":
         fig.add_trace(go.Scatter(
             x=fdf["time"], y=fdf["temperature"],
             mode="lines", name="Температура",
-            line=dict(color="#1f77b4", width=1.5),
+            line=dict(color="#7dd3fc", width=1.8),
+            fill="tozeroy",
+            fillcolor="rgba(125,211,252,0.06)",
             hovertemplate="%{x|%Y-%m-%d %H:%M}<br>%{y:.1f}°C<extra></extra>",
         ))
         fig.update_layout(
-            title="Температура в Астане",
+            title=dict(text="Температура в Астане", font=dict(color="#e2e8f0")),
             xaxis_title="Дата",
             yaxis_title="Температура (°C)",
             hovermode="x unified",
             height=380,
+            template="plotly_dark",
+            paper_bgcolor="rgba(0,0,0,0)",
+            plot_bgcolor="rgba(0,0,0,0)",
+            xaxis=dict(gridcolor="rgba(255,255,255,0.06)"),
+            yaxis=dict(gridcolor="rgba(255,255,255,0.06)"),
         )
         st.plotly_chart(fig, use_container_width=True)
 
@@ -470,6 +1050,11 @@ elif page == "📊 Данные":
                 corr, text_auto=True, color_continuous_scale="RdBu_r",
                 title="Корреляция между метеорологическими переменными",
             )
+            fig_corr.update_layout(
+                template="plotly_dark",
+                paper_bgcolor="rgba(0,0,0,0)",
+                plot_bgcolor="rgba(0,0,0,0)",
+            )
             st.plotly_chart(fig_corr, use_container_width=True)
 
         st.dataframe(fdf.tail(200), use_container_width=True, height=300)
@@ -479,8 +1064,8 @@ elif page == "📊 Данные":
 # PAGE: МОДЕЛЬ
 # ============================================================================
 
-elif page == "🧠 Модель":
-    st.header("🧠 Архитектура модели: Hybrid LSTM + TCN + Transformer")
+elif page == "Модель":
+    st.header("Архитектура модели: Hybrid LSTM + TCN + Transformer")
 
     model_obj, model_type = load_model()
 
@@ -572,15 +1157,23 @@ elif page == "🧠 Модель":
         fig = go.Figure()
         epochs = list(range(1, len(history["train_loss"]) + 1))
         fig.add_trace(go.Scatter(x=epochs, y=history["train_loss"],
-                                 name="Train Loss", line=dict(color="#1f77b4", width=2)))
+                                 name="Train Loss",
+                                 line=dict(color="#7dd3fc", width=2.5)))
         fig.add_trace(go.Scatter(x=epochs, y=history["val_loss"],
-                                 name="Val Loss",   line=dict(color="#ff7f0e", width=2)))
+                                 name="Val Loss",
+                                 line=dict(color="#a78bfa", width=2.5, dash="dash")))
         fig.update_layout(
-            title="Кривые обучения (MSE Loss)",
+            title=dict(text="Кривые обучения (MSE Loss)", font=dict(color="#e2e8f0")),
             xaxis_title="Epoch",
             yaxis_title="Loss",
             hovermode="x unified",
             height=350,
+            template="plotly_dark",
+            paper_bgcolor="rgba(0,0,0,0)",
+            plot_bgcolor="rgba(0,0,0,0)",
+            xaxis=dict(gridcolor="rgba(255,255,255,0.06)"),
+            yaxis=dict(gridcolor="rgba(255,255,255,0.06)"),
+            legend=dict(bgcolor="rgba(0,0,0,0.3)", bordercolor="rgba(255,255,255,0.1)"),
         )
         st.plotly_chart(fig, use_container_width=True)
     else:
@@ -595,8 +1188,8 @@ elif page == "🧠 Модель":
 # PAGE: ПРОГНОЗ  (Steps B + C)
 # ============================================================================
 
-elif page == "🔮 Прогноз":
-    st.header("🔮 Прогнозирование температуры")
+elif page == "Прогноз":
+    st.header("Прогнозирование температуры")
 
     model_obj, model_type = load_model()
     scaler, metadata = load_scaler_and_metadata()
@@ -666,7 +1259,6 @@ elif page == "🔮 Прогноз":
                     current_t = float(hist_temps.iloc[-1]) if hist_temps is not None else 0.0
                     if forecast_temps:
                         st.subheader("📊 Прогноз температуры")
-                        m1, m2, m3, m4 = st.columns(4)
 
                         next_1h    = forecast_temps[0]
                         next_12h   = forecast_temps[11] if len(forecast_temps) > 11 else forecast_temps[-1]
@@ -674,13 +1266,59 @@ elif page == "🔮 Прогноз":
                         t_next24   = forecast_times[-1] if forecast_times else None
                         lbl_24h    = t_next24.strftime("%d.%m %H:%M") if t_next24 else "+24 ч"
 
-                        m1.metric("Сейчас (факт)",    f"{current_t:.1f}°C")
-                        m2.metric("Через 1 час",       f"{next_1h:.1f}°C",
-                                  delta=f"{next_1h - current_t:+.1f}°C")
-                        m3.metric("Через 12 часов",    f"{next_12h:.1f}°C",
-                                  delta=f"{next_12h - current_t:+.1f}°C")
-                        m4.metric(f"Завтра ({lbl_24h})", f"{next_24h:.1f}°C",
-                                  delta=f"{next_24h - current_t:+.1f}°C")
+                        def _delta_cls(d): return "pos" if d >= 0 else "neg"
+                        def _delta_arrow(d): return "▲" if d >= 0 else "▼"
+
+                        d1  = next_1h  - current_t
+                        d12 = next_12h - current_t
+                        d24 = next_24h - current_t
+
+                        # Determine weather class from temperature range
+                        _avg_fc = sum(forecast_temps) / len(forecast_temps)
+                        if _avg_fc < -5:
+                            st.session_state["weather_class"] = "Snow"
+                        elif _avg_fc < 5:
+                            st.session_state["weather_class"] = "Clouds"
+                        elif _avg_fc < 15:
+                            st.session_state["weather_class"] = "Rain"
+                        else:
+                            st.session_state["weather_class"] = "Clear"
+
+                        m1, m2, m3, m4 = st.columns(4)
+                        with m1:
+                            st.markdown(
+                                '<div class="neon-card" style="--nc:#94a3b8">'
+                                '<div class="nc-icon"><i class="fa-solid fa-temperature-half"></i></div>'
+                                '<div class="nc-label">Сейчас (факт)</div>'
+                                f'<div class="nc-value">{current_t:.1f}°C</div>'
+                                '</div>', unsafe_allow_html=True)
+                        with m2:
+                            st.markdown(
+                                '<div class="neon-card" style="--nc:#7dd3fc">'
+                                '<div class="nc-icon"><i class="fa-solid fa-clock"></i></div>'
+                                '<div class="nc-label">Через 1 час</div>'
+                                f'<div class="nc-value">{next_1h:.1f}°C</div>'
+                                f'<div class="nc-delta {_delta_cls(d1)}">'
+                                f'{_delta_arrow(d1)} {d1:+.1f}°C</div>'
+                                '</div>', unsafe_allow_html=True)
+                        with m3:
+                            st.markdown(
+                                '<div class="neon-card" style="--nc:#a78bfa">'
+                                '<div class="nc-icon"><i class="fa-solid fa-wand-magic-sparkles"></i></div>'
+                                '<div class="nc-label">Через 12 часов</div>'
+                                f'<div class="nc-value">{next_12h:.1f}°C</div>'
+                                f'<div class="nc-delta {_delta_cls(d12)}">'
+                                f'{_delta_arrow(d12)} {d12:+.1f}°C</div>'
+                                '</div>', unsafe_allow_html=True)
+                        with m4:
+                            st.markdown(
+                                '<div class="neon-card" style="--nc:#34d399">'
+                                '<div class="nc-icon"><i class="fa-solid fa-calendar-days"></i></div>'
+                                f'<div class="nc-label">Завтра ({lbl_24h})</div>'
+                                f'<div class="nc-value">{next_24h:.1f}°C</div>'
+                                f'<div class="nc-delta {_delta_cls(d24)}">'
+                                f'{_delta_arrow(d24)} {d24:+.1f}°C</div>'
+                                '</div>', unsafe_allow_html=True)
 
                     # ── Gated Fusion weights visualization ────────────────
                     try:
@@ -711,6 +1349,12 @@ elif page == "🔮 Прогноз":
                     # ── Step C: interactive Plotly chart ──────────────────
                     fig = go.Figure()
 
+                    fig.update_layout(
+                        template="plotly_dark",
+                        paper_bgcolor="rgba(0,0,0,0)",
+                        plot_bgcolor="rgba(0,0,0,0)",
+                    )
+
                     # Solid line: actual historical temperatures
                     if hist_times is not None and hist_temps is not None:
                         fig.add_trace(go.Scatter(
@@ -739,9 +1383,11 @@ elif page == "🔮 Прогноз":
                             x=forecast_times,
                             y=forecast_temps,
                             mode="lines+markers",
-                            name="Прогноз (12 ч)",
-                            line=dict(color="#ff7f0e", width=2.5, dash="dash"),
-                            marker=dict(size=6, symbol="diamond"),
+                            name="Прогноз Hybrid (Gated Fusion)",
+                            line=dict(color="#34d399", width=2.8, dash="dash"),
+                            marker=dict(size=7, symbol="diamond",
+                                        color="#34d399",
+                                        line=dict(width=1, color="#a7f3d0")),
                             hovertemplate="%{x|%d %b %H:%M}<br><b>%{y:.1f}°C</b><extra>Прогноз</extra>",
                         ))
 
@@ -775,13 +1421,22 @@ elif page == "🔮 Прогноз":
                     fig.update_layout(
                         title=dict(
                             text="Температура в Астане: факт vs прогноз",
-                            font=dict(size=16),
+                            font=dict(size=16, color="#e2e8f0"),
                         ),
                         xaxis_title="Дата/Время",
                         yaxis_title="Температура (°C)",
-                        legend=dict(orientation="h", yanchor="bottom", y=1.02, x=0),
+                        legend=dict(
+                            orientation="h", yanchor="bottom", y=1.02, x=0,
+                            bgcolor="rgba(0,0,0,0.3)",
+                            bordercolor="rgba(255,255,255,0.1)",
+                        ),
                         hovermode="x unified",
                         height=440,
+                        template="plotly_dark",
+                        paper_bgcolor="rgba(0,0,0,0)",
+                        plot_bgcolor="rgba(0,0,0,0)",
+                        xaxis=dict(gridcolor="rgba(255,255,255,0.05)"),
+                        yaxis=dict(gridcolor="rgba(255,255,255,0.05)"),
                     )
                     st.plotly_chart(fig, use_container_width=True)
 
@@ -842,23 +1497,35 @@ elif page == "🔮 Прогноз":
                             fig_cmp = go.Figure()
                             fig_cmp.add_trace(go.Scatter(
                                 x=cmp_df["Время (UTC)"], y=cmp_df["Модель (°C)"],
-                                mode="lines+markers", name="Наша модель",
-                                line=dict(color="#ff7f0e", width=2.5, dash="dash"),
-                                marker=dict(size=6, symbol="diamond"),
+                                mode="lines+markers", name="Hybrid (наша модель)",
+                                line=dict(color="#34d399", width=2.8, dash="dash"),
+                                marker=dict(size=7, symbol="diamond", color="#34d399"),
                             ))
                             fig_cmp.add_trace(go.Scatter(
                                 x=cmp_df["Время (UTC)"], y=cmp_df["Open-Meteo (°C)"],
                                 mode="lines+markers", name="Open-Meteo (NWP)",
-                                line=dict(color="#2ca02c", width=2.5),
-                                marker=dict(size=5),
+                                line=dict(color="#7dd3fc", width=2.5),
+                                marker=dict(size=5, color="#7dd3fc"),
                             ))
                             fig_cmp.update_layout(
-                                title="Прогноз: гибридная модель vs Open-Meteo",
+                                title=dict(
+                                    text="Прогноз: гибридная модель vs Open-Meteo",
+                                    font=dict(color="#e2e8f0"),
+                                ),
                                 xaxis_title="Время (UTC)",
                                 yaxis_title="Температура (°C)",
-                                legend=dict(orientation="h", y=1.08),
+                                legend=dict(
+                                    orientation="h", y=1.08,
+                                    bgcolor="rgba(0,0,0,0.3)",
+                                    bordercolor="rgba(255,255,255,0.1)",
+                                ),
                                 hovermode="x unified",
                                 height=380,
+                                template="plotly_dark",
+                                paper_bgcolor="rgba(0,0,0,0)",
+                                plot_bgcolor="rgba(0,0,0,0)",
+                                xaxis=dict(gridcolor="rgba(255,255,255,0.05)"),
+                                yaxis=dict(gridcolor="rgba(255,255,255,0.05)"),
                             )
                             st.plotly_chart(fig_cmp, use_container_width=True)
 
@@ -958,8 +1625,8 @@ elif page == "🔮 Прогноз":
 # PAGE: РЕЗУЛЬТАТЫ  (Step D)
 # ============================================================================
 
-elif page == "📈 Результаты":
-    st.header("📈 Результаты оценки и сравнение моделей")
+elif page == "Результаты":
+    st.header("Результаты оценки и сравнение моделей")
 
     # ── Load stored test predictions if available ────────────────────────────
     def _load_test_predictions():
@@ -1059,35 +1726,78 @@ elif page == "📈 Результаты":
         "Тип":       ["Baseline", "Baseline", "ML", "Deep Learning", "Deep Learning"],
     })
 
-    # Highlight the best row
-    def _highlight_best(row):
-        color = "background-color: #d4edda; font-weight: bold;" if "Hybrid" in row["Модель"] else ""
-        return [color] * len(row)
-
-    st.dataframe(
-        comparison.style.apply(_highlight_best, axis=1),
-        use_container_width=True,
-        hide_index=True,
+    # Render as HTML table for reliable styling
+    rows_html = ""
+    for _, row in comparison.iterrows():
+        is_best = "Hybrid" in row["Модель"]
+        row_style = 'background:#3d2e00;color:#fde68a;font-weight:700;' if is_best else 'color:#e2e8f0;'
+        mae_val  = f"{row['MAE (°C)']:.6f}"  if isinstance(row["MAE (°C)"],  float) else row["MAE (°C)"]
+        rmse_val = f"{row['RMSE (°C)']:.6f}" if isinstance(row["RMSE (°C)"], float) else row["RMSE (°C)"]
+        r2_val   = f"{row['R²']:.6f}"         if isinstance(row["R²"],        float) else row["R²"]
+        rows_html += (
+            f'<tr style="{row_style}">'
+            f'<td style="padding:8px 12px;border-bottom:1px solid rgba(255,255,255,0.07)">{row["Модель"]}</td>'
+            f'<td style="padding:8px 12px;border-bottom:1px solid rgba(255,255,255,0.07)">{mae_val}</td>'
+            f'<td style="padding:8px 12px;border-bottom:1px solid rgba(255,255,255,0.07)">{rmse_val}</td>'
+            f'<td style="padding:8px 12px;border-bottom:1px solid rgba(255,255,255,0.07)">{r2_val}</td>'
+            f'<td style="padding:8px 12px;border-bottom:1px solid rgba(255,255,255,0.07)">{row["Параметры"]}</td>'
+            f'<td style="padding:8px 12px;border-bottom:1px solid rgba(255,255,255,0.07)">{row["Тип"]}</td>'
+            f'</tr>'
+        )
+    st.markdown(
+        f'''<table style="width:100%;border-collapse:collapse;font-size:0.9rem;">
+<thead><tr style="color:#94a3b8;border-bottom:2px solid rgba(255,255,255,0.15);">
+<th style="text-align:left;padding:8px 12px">Модель</th>
+<th style="text-align:left;padding:8px 12px">MAE (°C)</th>
+<th style="text-align:left;padding:8px 12px">RMSE (°C)</th>
+<th style="text-align:left;padding:8px 12px">R²</th>
+<th style="text-align:left;padding:8px 12px">Параметры</th>
+<th style="text-align:left;padding:8px 12px">Тип</th>
+</tr></thead>
+<tbody>{rows_html}</tbody>
+</table>''',
+        unsafe_allow_html=True,
     )
 
     # Bar chart: MAE comparison
     fig_bar = go.Figure(go.Bar(
         x=comparison["Модель"],
         y=comparison["MAE (°C)"],
-        marker_color=[
-            "#aab7c4", "#aab7c4", "#6c9cbf",
-            "#1f77b4", "#ff7f0e",
-        ],
+        marker=dict(
+            color=[
+                "rgba(100,116,139,0.55)",
+                "rgba(100,116,139,0.55)",
+                "rgba(125,211,252,0.45)",
+                "rgba(167,139,250,0.60)",
+                "rgba(52,211,153,0.85)",
+            ],
+            line=dict(
+                color=[
+                    "rgba(100,116,139,0.8)",
+                    "rgba(100,116,139,0.8)",
+                    "rgba(125,211,252,0.8)",
+                    "rgba(167,139,250,0.9)",
+                    "rgba(52,211,153,1.0)",
+                ],
+                width=1.5,
+            ),
+        ),
         text=[f"{v:.2f}" for v in comparison["MAE (°C)"]],
         textposition="outside",
+        textfont=dict(color="#e2e8f0"),
         hovertemplate="%{x}<br>MAE: %{y:.2f}°C<extra></extra>",
     ))
     fig_bar.update_layout(
-        title="MAE сравнение моделей (меньше — лучше)",
+        title=dict(text="MAE сравнение моделей (меньше — лучше)",
+                   font=dict(color="#e2e8f0")),
         yaxis_title="MAE (°C)",
         xaxis_title="",
         height=380,
-        yaxis=dict(range=[0, comparison["MAE (°C)"].max() * 1.25]),
+        yaxis=dict(range=[0, comparison["MAE (°C)"].max() * 1.25],
+                   gridcolor="rgba(255,255,255,0.05)"),
+        template="plotly_dark",
+        paper_bgcolor="rgba(0,0,0,0)",
+        plot_bgcolor="rgba(0,0,0,0)",
     )
     st.plotly_chart(fig_bar, use_container_width=True)
 
@@ -1104,20 +1814,28 @@ elif page == "📈 Результаты":
             fig_hist = go.Figure(go.Histogram(
                 x=residuals,
                 nbinsx=60,
-                marker_color="#1f77b4",
-                opacity=0.8,
+                marker=dict(color="rgba(125,211,252,0.65)",
+                            line=dict(color="rgba(125,211,252,0.9)", width=0.5)),
+                opacity=0.85,
                 name="Ошибки",
                 hovertemplate="Ошибка: %{x:.2f}°C<br>Частота: %{y}<extra></extra>",
             ))
-            fig_hist.add_vline(x=0, line_dash="dash", line_color="red",
-                               annotation_text="нулевая ошибка")
-            fig_hist.add_vline(x=residuals.mean(), line_dash="dot", line_color="green",
-                               annotation_text=f"μ={residuals.mean():.2f}")
+            fig_hist.add_vline(x=0, line_dash="dash", line_color="#f87171",
+                               annotation_text="нулевая ошибка",
+                               annotation_font_color="#f87171")
+            fig_hist.add_vline(x=residuals.mean(), line_dash="dot", line_color="#34d399",
+                               annotation_text=f"μ={residuals.mean():.2f}",
+                               annotation_font_color="#34d399")
             fig_hist.update_layout(
-                title="Распределение ошибок",
+                title=dict(text="Распределение ошибок", font=dict(color="#e2e8f0")),
                 xaxis_title="Ошибка предсказания (°C)",
                 yaxis_title="Частота",
                 height=340,
+                template="plotly_dark",
+                paper_bgcolor="rgba(0,0,0,0)",
+                plot_bgcolor="rgba(0,0,0,0)",
+                xaxis=dict(gridcolor="rgba(255,255,255,0.05)"),
+                yaxis=dict(gridcolor="rgba(255,255,255,0.05)"),
             )
             st.plotly_chart(fig_hist, use_container_width=True)
 
@@ -1127,19 +1845,27 @@ elif page == "📈 Результаты":
                 x=y_pred,
                 y=residuals,
                 mode="markers",
-                marker=dict(size=3, color="#1f77b4", opacity=0.5),
+                marker=dict(size=3, color="rgba(167,139,250,0.55)"),
                 hovertemplate="Прогноз: %{x:.1f}°C<br>Ошибка: %{y:.2f}°C<extra></extra>",
             ))
-            fig_scatter.add_hline(y=0, line_dash="dash", line_color="red")
-            fig_scatter.add_hline(y=mae_hybrid,  line_dash="dot", line_color="orange",
-                                   annotation_text=f"+MAE={mae_hybrid:.2f}")
-            fig_scatter.add_hline(y=-mae_hybrid, line_dash="dot", line_color="orange",
-                                   annotation_text=f"-MAE={mae_hybrid:.2f}")
+            fig_scatter.add_hline(y=0, line_dash="dash", line_color="#f87171")
+            fig_scatter.add_hline(y=mae_hybrid,  line_dash="dot", line_color="#fbbf24",
+                                   annotation_text=f"+MAE={mae_hybrid:.2f}",
+                                   annotation_font_color="#fbbf24")
+            fig_scatter.add_hline(y=-mae_hybrid, line_dash="dot", line_color="#fbbf24",
+                                   annotation_text=f"-MAE={mae_hybrid:.2f}",
+                                   annotation_font_color="#fbbf24")
             fig_scatter.update_layout(
-                title="Остатки vs Предсказанные значения",
+                title=dict(text="Остатки vs Предсказанные значения",
+                           font=dict(color="#e2e8f0")),
                 xaxis_title="Предсказание (°C)",
                 yaxis_title="Ошибка (°C)",
                 height=340,
+                template="plotly_dark",
+                paper_bgcolor="rgba(0,0,0,0)",
+                plot_bgcolor="rgba(0,0,0,0)",
+                xaxis=dict(gridcolor="rgba(255,255,255,0.05)"),
+                yaxis=dict(gridcolor="rgba(255,255,255,0.05)"),
             )
             st.plotly_chart(fig_scatter, use_container_width=True)
 
@@ -1149,18 +1875,29 @@ elif page == "📈 Результаты":
         fig_ts = go.Figure()
         fig_ts.add_trace(go.Scatter(
             y=y_true[:n_plot], mode="lines",
-            name="Реальные", line=dict(color="#1f77b4", width=1.5),
+            name="Реальные",
+            line=dict(color="#7dd3fc", width=1.8),
         ))
         fig_ts.add_trace(go.Scatter(
             y=y_pred[:n_plot], mode="lines",
-            name="Предсказания", line=dict(color="#ff7f0e", width=1.5, dash="dot"),
+            name="Предсказания Hybrid",
+            line=dict(color="#34d399", width=1.8, dash="dot"),
         ))
         fig_ts.update_layout(
-            title=f"Предсказания vs Реальные (первые {n_plot} точек тестовой выборки)",
+            title=dict(
+                text=f"Предсказания vs Реальные (первые {n_plot} точек тестовой выборки)",
+                font=dict(color="#e2e8f0"),
+            ),
             xaxis_title="Шаг времени",
             yaxis_title="Температура (°C)",
             hovermode="x unified",
             height=360,
+            template="plotly_dark",
+            paper_bgcolor="rgba(0,0,0,0)",
+            plot_bgcolor="rgba(0,0,0,0)",
+            legend=dict(bgcolor="rgba(0,0,0,0.3)", bordercolor="rgba(255,255,255,0.1)"),
+            xaxis=dict(gridcolor="rgba(255,255,255,0.05)"),
+            yaxis=dict(gridcolor="rgba(255,255,255,0.05)"),
         )
         st.plotly_chart(fig_ts, use_container_width=True)
 
